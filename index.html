@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Speedrun Tracker</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 20px;
+      background-color: #1e1e2f;
+      color: #f1f1f1;
+    }
+    h2 {
+      color: #e0e0e0;
+    }
+    input[type="text"] {
+      padding: 6px;
+      width: 220px;
+      margin-bottom: 15px;
+      margin-right: 10px;
+      border: 1px solid #444;
+      border-radius: 5px;
+      background-color: #2e2e3e;
+      color: white;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      background-color: #2e2e3e;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #555;
+      padding: 4px;
+      text-align: center;
+      color: #e0e0e0;
+    }
+    th {
+      background-color: #3a3a5a;
+      color: #ffffff;
+      position: sticky;
+      top: 0;
+    }
+    tr:nth-child(even) { background-color: #2a2a40; }
+    .hadir { background-color: #2d4d2d; }
+    .tiada { background-color: #5a2c2c; }
+    select, input[type="checkbox"] {
+      transform: scale(1.1);
+    }
+    input[type="text"].nama-input {
+      width: 100%;
+      box-sizing: border-box;
+      border: none;
+      padding: 4px;
+      background-color: #3a3a5a;
+      color: white;
+      text-align: center;
+    }
+    button {
+      padding: 6px 12px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+  </style>
+</head>
+<body>
+  <h2>Speedrun Tracker</h2>
+  <input type="text" id="searchCID" placeholder="Cari CID..." onkeyup="searchPeserta()" />
+  <input type="text" id="searchInput" placeholder="Cari nama peserta..." onkeyup="searchPeserta()" />
+  <button onclick="exportToExcel()">Export ke Excel</button>
+
+  <table id="trackerTable">
+    <thead>
+      <tr>
+        <th>No</th>
+        <th>CID</th>
+        <th>Nama Peserta</th>
+        <th>Kehadiran</th>
+        <th>CP1</th><th>CP2</th><th>CP3</th><th>CP4</th><th>CP5</th><th>CP6</th><th>CP7</th><th>CP8</th><th>CP9</th><th>CP10</th><th>CP11</th><th>CP12</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAblLH6rxPjwlVDVCsVNEP-nva6-7l2qTQ",
+      authDomain: "speedrun-v4.firebaseapp.com",
+      databaseURL: "https://speedrun-v4-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "speedrun-v4",
+      storageBucket: "speedrun-v4.firebasestorage.app",
+      messagingSenderId: "341415809153",
+      appId: "1:341415809153:web:37ee7aaeb0d1a826a67d80",
+      measurementId: "G-KXJBL3XZNY"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    let pesertaList = [];
+
+    db.ref("pesertaList").on("value", (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        pesertaList = data;
+      } else {
+        pesertaList = Array.from({ length: 150 }, (_, i) => ({
+          cid: `CID${String(i + 1).padStart(3, '0')}`,
+          nama: '',
+          hadir: true,
+          checkpoint: Array(12).fill(false)
+        }));
+        db.ref("pesertaList").set(pesertaList);
+      }
+      populateTable();
+    });
+
+    function saveToFirebase() {
+      db.ref("pesertaList").set(pesertaList);
+    }
+
+    function populateTable() {
+      const tableBody = document.getElementById("tableBody");
+      tableBody.innerHTML = "";
+      pesertaList.forEach((peserta, index) => {
+        const row = document.createElement("tr");
+        row.className = peserta.hadir ? "hadir" : "tiada";
+
+        const cpCells = peserta.checkpoint.map((cp, i) => {
+          return `<td><input type="checkbox" ${cp ? 'checked' : ''} onchange="updateCheckpoint(${index}, ${i}, this.checked)"></td>`;
+        }).join('');
+
+        row.innerHTML = `
+          <td>${index + 1}</td>
+          <td>${peserta.cid}</td>
+          <td><input type="text" class="nama-input" value="${peserta.nama}" onchange="updateNama(${index}, this.value)" /></td>
+          <td>
+            <select onchange="updateHadir(${index}, this.value)" style="padding: 2px">
+              <option value="true" ${peserta.hadir ? 'selected' : ''}>HADIR</option>
+              <option value="false" ${!peserta.hadir ? 'selected' : ''}>TIADA</option>
+            </select>
+          </td>
+          ${cpCells}
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+
+    function updateNama(index, value) {
+      pesertaList[index].nama = value;
+      saveToFirebase();
+    }
+
+    function updateHadir(index, value) {
+      pesertaList[index].hadir = value === 'true';
+      saveToFirebase();
+    }
+
+    function updateCheckpoint(index, cpIndex, value) {
+      pesertaList[index].checkpoint[cpIndex] = value;
+      saveToFirebase();
+    }
+
+    function searchPeserta() {
+      const inputNama = document.getElementById("searchInput").value.toLowerCase();
+      const inputCID = document.getElementById("searchCID").value.toLowerCase();
+      const rows = document.querySelectorAll("#trackerTable tbody tr");
+      rows.forEach(row => {
+        const cid = row.cells[1].textContent.toLowerCase();
+        const nama = row.cells[2].querySelector('input').value.toLowerCase();
+        if (cid.includes(inputCID) && nama.includes(inputNama)) {
+          row.style.display = "";
+        } else {
+          row.style.display = "none";
+        }
+      });
+    }
+
+    function exportToExcel() {
+      const data = pesertaList.map(p => {
+        const cpStatus = p.checkpoint.map((c, i) => ({ [`CP${i+1}`]: c ? '✓' : '' }));
+        return Object.assign({ CID: p.cid, Nama: p.nama, Kehadiran: p.hadir ? 'HADIR' : 'TIADA' }, ...cpStatus);
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Speedrun");
+      XLSX.writeFile(workbook, "speedrun_data.xlsx");
+    }
+  </script>
+</body>
+</html>
